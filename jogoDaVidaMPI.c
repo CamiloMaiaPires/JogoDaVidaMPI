@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include "mpi.h"
+#include <math.h>
 
 void aloca_matriz(int l, int c, int*** grid, int*** newgrid){
   
@@ -88,16 +90,36 @@ int soma_celulas(int*** grid, int linhas, int colunas){
   return soma;
 }
 
-int main(void) {
+int main(int argc, char *argv[]) {
 
   struct timeval inicio, final;
   long long tmili;
   gettimeofday(&inicio, NULL);
-  int linhas = 50;
+  int linhas = 125;
   int colunas = 50;
   int geracoes = 100;
 
   int **grid, **newgrid;
+
+  //mpi
+  int noProcesses, processId, localSize, first, noLines;
+
+  MPI_Init(&argc, &argv);
+  MPI_Comm_size(MPI_COMM_WORLD, &noProcesses);
+  MPI_Comm_rank(MPI_COMM_WORLD, &processId);
+
+  localSize = linhas/noProcesses;
+  first = processId*localSize;
+
+  if (processId==noProcesses-1) {
+    noLines = linhas - first;}
+  else
+    noLines = floor((float)linhas/noProcesses);
+
+  printf("%d %d\n",  processId, noLines);
+
+  MPI_Finalize();
+
   aloca_matriz(linhas, colunas, &grid, &newgrid);
 
   //GLIDER
