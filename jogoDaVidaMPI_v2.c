@@ -27,39 +27,78 @@ void aloca_matriz(int l, int c, int*** grid, int*** newgrid){
 
 int getNeighbors(int** grid, int i, int j, int linhas, int colunas) {
 
-  int vivos = 0, x, y, processId;
+  int vivos = 0, x, y, processId, noProcesses, *previousRow, *followingRow;
+  MPI_Status status;
+
+  previousRow = malloc(colunas * sizeof(int*));
+  followingRow = malloc(colunas * sizeof(int*));
 
   MPI_Comm_rank(MPI_COMM_WORLD, &processId);
+  MPI_Comm_size(MPI_COMM_WORLD, &noProcesses);
 
+   
+  
+  //trocas de informação
+  if(processId == 0){
+
+    MPI_Recv(previousRow, colunas, MPI_INT, noProcesses-1, 13, MPI_COMM_WORLD, &status);
+    MPI_Recv(followingRow, colunas, MPI_INT, 1, 14, MPI_COMM_WORLD, &status);
+
+    MPI_Send(grid[linhas-1], colunas, MPI_INT, 1, 13, MPI_COMM_WORLD);
+    MPI_Send(grid[0], colunas, MPI_INT, noProcesses-1, 14, MPI_COMM_WORLD);
+    // for(int cont=0; cont<colunas; cont++){
+    //   printf("%d ", previousRow[cont]);
+    
+    // }
+    // printf("\n");
+  } else if (processId == noProcesses-1){
+    MPI_Send(grid[linhas-1], colunas, MPI_INT, 0, 13, MPI_COMM_WORLD);
+    MPI_Send(grid[0], colunas, MPI_INT, processId-1, 14, MPI_COMM_WORLD);
+
+    MPI_Recv(previousRow, colunas, MPI_INT, processId-1, 13, MPI_COMM_WORLD, &status);
+    MPI_Recv(followingRow, colunas, MPI_INT, 0, 14, MPI_COMM_WORLD, &status);
+    // for(int cont=0; cont<colunas; cont++){
+    //   printf("%d", grid[linhas-1][cont]);
+    
+    // }
+    // printf("\n");
+  } else{
+    MPI_Send(grid[linhas-1], colunas, MPI_INT, processId+1, 13, MPI_COMM_WORLD);
+    MPI_Send(grid[0], colunas, MPI_INT, processId-1, 14, MPI_COMM_WORLD);
+
+    MPI_Recv(previousRow, colunas, MPI_INT, processId-1, 13, MPI_COMM_WORLD, &status);
+    MPI_Recv(followingRow, colunas, MPI_INT, processId+1, 14, MPI_COMM_WORLD, &status);
+  }
+  
+  
   for(y=i-1; y<=i+1; y++){
     for(x=j-1; x<=j+1; x++){
       
       if(y == -1 && x == -1){
-        if (grid[linhas-1][colunas-1] == 1) { vivos++;}
+        if (previousRow[colunas-1] == 1) { vivos++;}
       } else if(y == -1 && x >= 0 && x <= colunas-1){
-        if (grid[linhas-1][x] == 1) { vivos++;}
+        if (previousRow[x] == 1) { vivos++;}
       } else if(y == -1 && x > colunas-1){
-        if (grid[linhas-1][0] == 1) { vivos++;}
+        if (previousRow[0] == 1) { vivos++;}
       } else if(x == -1 && y>=0 && y<=linhas-1){
         if (grid[y][colunas-1] == 1) { vivos++;}
       } else if(x == -1 && y > linhas-1){
-        //trocar
-        if (grid[0][colunas-1] == 1) { vivos++;}
+        if (followingRow[colunas-1] == 1) { vivos++;}
       } 
       else if(y > linhas-1 && x >=0 && x <= colunas-1){
-        //trocar
-        if (grid[0][x] == 1) { vivos++;}
+        if (followingRow[x] == 1) { vivos++;}
       } else if(y > linhas-1 && x > colunas-1){
-        //trocar
-        if (grid[0][0] == 1) { vivos++;}
+        if (followingRow[0] == 1) { vivos++;}
       } else if(x > colunas-1 && y >=0 && y <= linhas-1){
         if (grid[y][0] == 1) { vivos++;}
       } else{
         if (grid[y][x] == 1) { vivos++;}
       }
-      
     }
   }
+
+
+
   if(grid[i][j] == 1){ vivos--;}
   return vivos;
 }
@@ -101,11 +140,9 @@ int main(int argc, char *argv[]) {
   struct timeval inicio, final;
   long long tmili;
   gettimeofday(&inicio, NULL);
-  int linhas = 125;
-  int colunas = 50;
+  int linhas = 100;
+  int colunas = 100;
   int geracoes = 100;
-
-  
 
   //mpi
   int noProcesses, processId, localSize, first, noLines, *totalProcs;
@@ -146,13 +183,25 @@ int main(int argc, char *argv[]) {
     grid[lin+1][col  ] = 1;
     grid[lin+1][col+1] = 1;
     grid[lin+2][col+1] = 1;
-  }
 
+  }
+  // if(processId==1){
+  //   for(int i = 0 ; i< noLines ; i++){
+  //   for (int j=0; j< colunas; j++){
+  //     printf("%d ", grid[i][j]);
+  //   }
+  //   printf("\n");
+  // }
+  // printf("\n\n");
+  // }
+  
+  MPI_Barrier(MPI_COMM_WORLD);
+  
   for(int k=0; k<geracoes; k++){
     nova_geracao(&grid, &newgrid, noLines, colunas);
     MPI_Barrier(MPI_COMM_WORLD);
   }
-  
+
   //aloca array para a soma de celulas vivas de cada processo
   totalProcs = (int *) malloc(noProcesses*sizeof(int));
 
