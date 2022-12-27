@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include "mpi.h"
+#include <math.h>
 
 void aloca_matriz(int l, int c, int*** grid, int*** newgrid){
   
@@ -39,10 +41,14 @@ int getNeighbors(int** grid, int i, int j, int linhas, int colunas) {
       } else if(x == -1 && y>=0 && y<=linhas-1){
         if (grid[y][colunas-1] == 1) { vivos++;}
       } else if(x == -1 && y > linhas-1){
+        //trocar
         if (grid[0][colunas-1] == 1) { vivos++;}
-      } else if(y > linhas-1 && x >=0 && x <= colunas-1){
+      } 
+      else if(y > linhas-1 && x >=0 && x <= colunas-1){
+        //trocar
         if (grid[0][x] == 1) { vivos++;}
       } else if(y > linhas-1 && x > colunas-1){
+        //trocar
         if (grid[0][0] == 1) { vivos++;}
       } else if(x > colunas-1 && y >=0 && y <= linhas-1){
         if (grid[y][0] == 1) { vivos++;}
@@ -88,40 +94,76 @@ int soma_celulas(int*** grid, int linhas, int colunas){
   return soma;
 }
 
-int main(void) {
+int main(int argc, char *argv[]) {
 
   struct timeval inicio, final;
   long long tmili;
   gettimeofday(&inicio, NULL);
-  int linhas = 50;
+  int linhas = 125;
   int colunas = 50;
   int geracoes = 100;
 
-  int **grid, **newgrid;
-  aloca_matriz(linhas, colunas, &grid, &newgrid);
+  int **grid[4], **newgrid[4];
 
-  //GLIDER
-  int lin = 1, col = 1;
-  grid[lin  ][col+1] = 1;
-  grid[lin+1][col+2] = 1;
-  grid[lin+2][col  ] = 1;
-  grid[lin+2][col+1] = 1;
-  grid[lin+2][col+2] = 1;
+  //mpi
+  int noProcesses, processId, localSize, first, noLines;
 
-  //R-pentomino
-  lin =10; col = 30;
-  grid[lin  ][col+1] = 1;
-  grid[lin  ][col+2] = 1;
-  grid[lin+1][col  ] = 1;
-  grid[lin+1][col+1] = 1;
-  grid[lin+2][col+1] = 1;
 
-  for(int k=0; k<geracoes; k++){
-    nova_geracao(&grid, &newgrid, linhas, colunas);
+  
+  MPI_Init(&argc, &argv);
+  MPI_Comm_size(MPI_COMM_WORLD, &noProcesses);
+  MPI_Comm_rank(MPI_COMM_WORLD, &processId);
+
+  localSize = linhas/noProcesses;
+  first = processId*localSize;
+
+  if (processId==noProcesses-1) {
+    noLines = linhas - first;}
+  else 
+    noLines = floor((float)linhas/noProcesses);
+
+  printf("%d %d\n",  processId, noLines);
+  
+  aloca_matriz(noLines, colunas, &grid[processId], &newgrid[processId]);
+
+  if(processId==0){
+    //GLIDER
+    int lin = 1, col = 1;
+    grid[0][lin  ][col+1] = 1;
+    grid[0][lin+1][col+2] = 1;
+    grid[0][lin+2][col  ] = 1;
+    grid[0][lin+2][col+1] = 1;
+    grid[0][lin+2][col+2] = 1;
+
+    //R-pentomino
+    lin =10; col = 30;
+    grid[0][lin  ][col+1] = 1;
+    grid[0][lin  ][col+2] = 1;
+    grid[0][lin+1][col  ] = 1;
+    grid[0][lin+1][col+1] = 1;
+    grid[0][lin+2][col+1] = 1;
   }
   
-  int total = soma_celulas(&grid, linhas, colunas);
-  printf("%d\n", total);
+  MPI_Barrier(MPI_COMM_WORLD);
+  printf("Process num: %d\n",processId);
+  for(int i = 0 ; i< noLines ; i++){
+    for (int j=0; j< colunas; j++){
+      printf("%d ", grid[processId][i][j]);
+    }
+    printf("\n");
+  }
+  
+
+  MPI_Finalize();
+
+  for(int k=0; k<geracoes; k++){
+      nova_geracao(&grid[processId], &newgrid[processId], noLines, colunas);
+      MPI_Barrier(MPI_COMM_WORLD);
+  }
+  
+  /* int total = soma_celulas(&grid, linhas, colunas); 
+  printf("%d\n", total); */
+
   gettimeofday(&final, NULL);
   tmili = (int) (1000*(final.tv_sec - inicio.tv_sec) + (final.tv_usec - inicio.tv_usec) / 1000);
   printf("tempo decorrido: %lld  ms\n", tmili);
